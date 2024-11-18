@@ -3,6 +3,7 @@ sequence classification.
 """
 import argparse
 from pathlib import Path
+import random
 
 from transformers import (
         TrainingArguments,
@@ -133,5 +134,6 @@ def main(args):
 if __name__ == "__main__":
   #- **inputs**: train data, (optional) validation data, (optional) hyperparameter values
   #- **outputs**: serialized model file
+    random.seed(42)
     args = parse_args()
     main(args)
