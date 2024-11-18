@@ -47,6 +47,11 @@ def parse_args():
         help="Learning rate for the training."
     )
     parser.add_argument(
+        "--lowercase",
+        action="store_true",
+        help="If set, put the model input into lowercase."
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="If set, prints also confusion matrix, precision and recall for each category"
@@ -102,7 +107,7 @@ def main(args):
             tokenizer=tokenizer,
             text_cols=args.text_cols,
             label2id=label2id,
-            to_lower=False,
+            to_lower=args.lowercase,
     )
 
     eval_dir = exp_dir / "eval"

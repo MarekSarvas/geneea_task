@@ -62,12 +62,30 @@ def parse_args():
         default=["headline", "short_description"],
         help="Learning rate for the training."
     )
+    parser.add_argument(
+        "--lowercase",
+        action="store_true",
+        default=False,
+        help="If set, put the model input into lowercase."
+    )
     # Hyperparams
     parser.add_argument(
         "--lr",
         type=float,
         default=1e-3,
         help="Learning rate for the training."
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+        help=""
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=4,
+        help=""
     )
     return parser.parse_args()
 
@@ -109,24 +127,25 @@ def main(args):
             tokenizer=tokenizer,
             text_cols=args.text_cols,
             label2id=label2id,
-            to_lower=False,
+            to_lower=args.lowercase,
     )
 
-    # TODO: set correct hyperparams
     # 3. Prepare params for training
     training_args = TrainingArguments(
         output_dir=exp_dir,
-        per_device_train_batch_size=16,
-        gradient_accumulation_steps=4,
-        per_device_eval_batch_size=8,
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        per_device_eval_batch_size=args.batch_size,
         num_train_epochs=10,
-        max_steps=1600,
+        max_steps=10000,
         save_strategy="steps",
         eval_strategy="steps",
-        save_steps=400,
-        eval_steps=200,
-        load_best_model_at_end=False,
-        learning_rate=1e-4,
+        save_steps=1000,
+        eval_steps=500,
+        logging_steps=100,
+        save_total_limit=5,
+        load_best_model_at_end=True,
+        learning_rate=args.lr,
         weight_decay=0.01,
     )
 
