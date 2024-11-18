@@ -9,8 +9,11 @@ from transformers import (
         TrainingArguments,
         Trainer,
         DataCollatorWithPadding,
+        onnx
 )
+from transformers.onnx import FeaturesManager
 from datasets import load_dataset, disable_caching
+from optimum.onnxruntime import ORTModelForSequenceClassification
 
 from utils import (
         create_label_mapping,
@@ -117,6 +120,10 @@ def main(args):
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=8,
         num_train_epochs=1,
+        max_steps=5,
+        save_strategy="steps",
+        save_steps=5,
+        eval_steps=5,
         load_best_model_at_end=False,
         learning_rate=1e-4,
         weight_decay=0.01,
@@ -134,6 +141,28 @@ def main(args):
     )
     trainer.train()
     trainer.save_model(exp_dir)
+
+
+
+    # set parameters and paths
+    feature = "sequence-classification"
+    onnx_dir = exp_dir / "onnx"
+    onnx_dir.mkdir(parents=True, exist_ok=True)
+    onnx_model_path = onnx_dir / "model.onnx"
+
+    _, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=feature)
+    onnx_config = model_onnx_config(model.config)
+    model = model.cpu()
+    # export
+    _, _ = onnx.export(
+            preprocessor=tokenizer,
+            model=model,
+            config=onnx_config,
+            opset=14,
+            output=onnx_model_path
+    )
+    tokenizer.save_pretrained(onnx_model_path.parent)
+
 
 
 if __name__ == "__main__":

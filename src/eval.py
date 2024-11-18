@@ -4,20 +4,22 @@ import argparse
 import json
 from pathlib import Path
 
+import tqdm
 import numpy as np
 from sklearn.metrics import confusion_matrix
 from datasets import load_dataset
-from transformers import (
-        TrainingArguments,
-        Trainer,
-        DataCollatorWithPadding,
-)
+
+from transformers import DataCollatorWithPadding
+from torch.utils.data import DataLoader
 
 from utils import (
     load_models,
     compute_metrics,
-    prepare_dataset
+    prepare_dataset,
+    prepare_onnx_batch
 )
+
+import onnxruntime
 
 
 def parse_args():
@@ -35,12 +37,6 @@ def parse_args():
         default="exp/default_exp",
         help="Path to the dir where the model and logs will be stored."
     )
-    #parser.add_argument(
-    #    "--label2id",
-    #    type=str,
-    #    default="data/label2id.json",
-    #    help="Path to the test data JSON file."
-    #)
     parser.add_argument(
         "--text_cols",
         nargs="+",
@@ -52,29 +48,22 @@ def parse_args():
         action="store_true",
         help="If set, prints also confusion matrix, precision and recall for each category"
     )
-
     return parser.parse_args()
 
 
 def main(args):
-    # 1. Load dataset
     test_path = Path(args.test_data)
+    exp_dir = Path(args.exp_dir)
+
+    # 1. Load dataset
     if test_path.exists() and test_path.suffix == ".jsonl":
         dataset = load_dataset("json", data_files={"test": str(test_path)})
     else:
         raise FileNotFoundError("Test data file does not exists.")
 
-    # Load mappings to convert the labels in dataset
-    #label2id_path = Path(args.label2id)
-    #if label2id_path.exists():
-    #    with label2id_path.open(mode='r', encoding='utf-8') as f:
-    #        label2id = json.load(f)
-    #else:
-    #    raise FileNotFoundError(f"Label mappings not found at {label2id_path}")
-
     # 2. Load models
-    model, tokenizer = load_models(args.exp_dir, args.exp_dir, local_files_only=True)
-    collator = DataCollatorWithPadding(tokenizer)
+    model, tokenizer = load_models(str(exp_dir), str(exp_dir), local_files_only=True)
+    collator = DataCollatorWithPadding(tokenizer, padding=True)
 
     label2id = model.config.label2id
     id2label= model.config.id2label
@@ -87,32 +76,38 @@ def main(args):
             label2id=label2id
     )
 
-    eval_dir = Path(args.exp_dir) / "eval"
+    eval_dir = exp_dir / "eval"
     if not eval_dir.exists():
         eval_dir.mkdir(parents=True, exist_ok=True)
 
-    # 3. Prepare params for training
-    training_args = TrainingArguments(
-        output_dir=eval_dir,
-        per_device_eval_batch_size=8,
-    )
+    providers = [
+    ('CUDAExecutionProvider', {
+        'device_id': 0,
+    }),
+    'CPUExecutionProvider',
+    ]
+    onnx_model_path = exp_dir/ "onnx" / "model.onnx"
+    onnx_session = onnxruntime.InferenceSession(onnx_model_path, providers=providers)
 
-    # 4. Train the model
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=None,
-        eval_dataset=None,
-        tokenizer=tokenizer,
-        data_collator=collator,
-        compute_metrics=lambda x: compute_metrics(x, args.verbose, id2label),
-    )
+    predictions = []
+    train_dataloader = DataLoader(dataset["test"], batch_size=32, collate_fn=tokenizer.pad)
+    for batch in tqdm.tqdm(train_dataloader, total=len(train_dataloader)):
+        inputs = prepare_onnx_batch(batch)
+        batch_preds = onnx_session.run(["logits"], inputs)
+        predictions.append(batch_preds[0])
+        break
 
-    predictions, labels, metrics = trainer.predict(dataset["test"])
+    labels = dataset["test"]["labels"][:32]
+    predictions = np.concatenate(predictions, axis=0)
+
+
+    metrics = compute_metrics((predictions, labels), args.verbose, id2label=id2label)
+
     predictions = np.argmax(predictions, axis=1)
 
     predictions = [id2label[x] for x in predictions]
     labels = [id2label[x] for x in labels]
+
     cm = confusion_matrix(y_true=labels, y_pred=predictions)
     np.save(eval_dir / "confusion_matrix.npy", cm)
     

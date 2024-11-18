@@ -116,6 +116,7 @@ def load_models(model_name: str, tokenizer_name: str, id2label: Optional[Dict] =
         Tuple[AutoModelForSequenceClassification, AutoTokenizer]: Model and tokenizer.
     """
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, local_files_only=local_files_only)
+    tokenizer.model_input_names = ['input_ids', 'attention_mask']
     if id2label is not None:
         model = AutoModelForSequenceClassification.from_pretrained(
                     model_name,
@@ -173,5 +174,33 @@ def compute_metrics(output: Tuple, verbose: bool = False, id2label: Optional[Dic
         p = prettyfy_metric(p, id2label)
         r = recall_score(labels, preds, average=None, zero_division=0)
         r = prettyfy_metric(r, id2label)
-        return {"accuracy": acc, "precision": p, "recall": r} 
+        return {"accuracy": acc, "precision": p, "recall": r}
     return {"accuracy": acc}
+
+
+def prepare_onnx_batch(batch: Dict) -> Dict:
+    """Transforms List[List[int]] into numpy ndarray and creates dict for onnx runtime.
+
+    Args:
+        batch (Dict): Data from dataloader
+
+    Returns:
+        Dict: Token ids and attention mask.
+    """
+    onnx_inputs = {
+        'input_ids': np.array(batch['input_ids']),
+        'attention_mask': np.array(batch['attention_mask'])
+    }
+    return onnx_inputs
+
+
+#def onnx_predict(session, dataset, batch_size: int) -> List:
+#    predictions = []
+#    for i in range(0, len(dataset), batch_size):
+#        print(f"BATCH: {i}:{i+batch_size}")
+#        batch = dataset[i:i+batch_size]
+#        breakpoint()
+#        batch_inputs = prepare_onnx_batch(batch)
+#        batch_predictions = session.run("logits", batch_inputs)
+#        predictions.append(batch_predictions[0])
+#    return predictions
