@@ -85,9 +85,14 @@ def main(args):
 
     dataset = load_dataset("json", data_files=data_files)
 
-    # store label 2 id mappings
+    # Create experiment direcotry and store label mappings
+    exp_dir = Path(args.exp_dir)
+    if not exp_dir.exists():
+        exp_dir.mkdir(parents=True, exist_ok=True)
+
+    # store label2id mappings
     labels = get_labels(dataset["train"])
-    label2id_path = train.parent / "label2id.json"
+    label2id_path = exp_dir / "label2id.json"
     label2id = create_label_mapping(labels, label2id_path)
     id2label = {id: label for label, id in label2id.items()}
 
@@ -107,7 +112,7 @@ def main(args):
     # TODO: set correct hyperparams
     # 3. Prepare params for training
     training_args = TrainingArguments(
-        output_dir=args.exp_dir,
+        output_dir=exp_dir,
         per_device_train_batch_size=16,
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=8,
@@ -128,7 +133,7 @@ def main(args):
         compute_metrics=lambda x: compute_metrics(x, verbose=False, id2label=id2label),
     )
     trainer.train()
-    trainer.save_model(args.exp_dir)
+    trainer.save_model(exp_dir)
 
 
 if __name__ == "__main__":
