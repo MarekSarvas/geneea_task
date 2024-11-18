@@ -2,15 +2,19 @@
 """
 from pathlib import Path
 import json
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 
 import numpy as np
 from transformers import (
         AutoModelForSequenceClassification,
         AutoTokenizer
 )
-from datasets import load_dataset, DatasetDict, Dataset, ClassLabel
-import evaluate
+from datasets import DatasetDict, Dataset, ClassLabel
+from sklearn.metrics import (
+        precision_score,
+        recall_score,
+        accuracy_score
+)
 
 
 def create_label_mapping(labels: List[str], out_path: Path) -> Dict:
@@ -122,17 +126,45 @@ def load_models(model_name: str, tokenizer_name: str, num_labels: int, local_fil
     return model, tokenizer
 
 
-def compute_metrics(output: Tuple):
-    """Computes accuracy on predicted labels
+def prettyfy_metric(category_scores: np.ndarray, id2label: Optional[Dict] = None) -> Dict:
+    """Store computed precision or recall as dictionary for each label.
 
     Args:
-        output (Tuple): Output of the model.
+        category_scores (np.ndarray): Metric value for each category.
+        id2label (Optional[Dict], optional): Mapping. Defaults to None.
 
     Returns:
-        _type_: Accuracy metric.
+        Dict: Metric for each category.
     """
-    metric = evaluate.load("accuracy")
+    # if id2label dict is not provided, create arbitrary label names
+    if id2label is None:
+        id2label = {id: f"Label_{id}" for id in range(len(category_scores))}
+
+    pretty_category_score = {}
+    for i, score in enumerate(category_scores):
+        pretty_category_score[id2label[i]] = score
+
+    return pretty_category_score
+
+
+def compute_metrics(output: Tuple, verbose: bool = False, id2label: Optional[Dict] = None) -> Dict:
+    """Computes accuracy and optionally precision and recall on predicted labels.
+
+    Args:
+        output (Tuple): Labels and predictions of the model.
+        verbose (bool, optional): If True, compute also precision and recall. Defaults to False.
+        id2label (Optional[Dict], optional): Label mappings. Defaults to None.
+
+    Returns:
+        Dict: Dictionary containing metrics.
+    """
     preds_logits, labels = output
     preds = np.argmax(preds_logits, axis=1)
-    acc = metric.compute(predictions=preds, references=labels)
-    return acc
+    acc = accuracy_score(labels, preds)
+    if verbose:
+        p = precision_score(labels, preds, average=None, zero_division=0)
+        p = prettyfy_metric(p, id2label)
+        r = recall_score(labels, preds, average=None, zero_division=0)
+        r = prettyfy_metric(r, id2label)
+        return {"accuracy": acc, "precision": p, "recall": r} 
+    return {"accuracy": acc}

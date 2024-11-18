@@ -89,6 +89,7 @@ def main(args):
     labels = get_labels(dataset["train"])
     label2id_path = train.parent / "label2id.json"
     label2id = create_label_mapping(labels, label2id_path)
+    id2label = {id: label for label, id in label2id.items()}
 
 
     # 2. Load models
@@ -110,8 +111,10 @@ def main(args):
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=8,
         num_train_epochs=20,
-        eval_strategy="epoch",
-        save_strategy="epoch",
+        max_steps=100,
+        eval_strategy="steps",
+        eval_steps=1,
+        save_strategy="steps",
         load_best_model_at_end=True,
         learning_rate=1e-4,
         weight_decay=0.01,
@@ -125,7 +128,7 @@ def main(args):
         eval_dataset=dataset["val"],
         tokenizer=tokenizer,
         data_collator=collator,
-        compute_metrics=compute_metrics,
+        compute_metrics=lambda x: compute_metrics(x, verbose=False, id2label=id2label),
     )
     trainer.train()
     trainer.save_model(args.exp_dir)
