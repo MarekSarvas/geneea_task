@@ -93,7 +93,7 @@ def main(args):
 
 
     # 2. Load models
-    model, tokenizer = load_models(args.model, args.model, len(label2id))
+    model, tokenizer = load_models(args.model, args.model, label2id=label2id, id2label=id2label)
     collator = DataCollatorWithPadding(tokenizer)
 
     # 3. preprocess and tokenize dataset
@@ -104,18 +104,15 @@ def main(args):
             label2id=label2id
     )
 
+    # TODO: set correct hyperparams
     # 3. Prepare params for training
     training_args = TrainingArguments(
         output_dir=args.exp_dir,
         per_device_train_batch_size=16,
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=8,
-        num_train_epochs=20,
-        max_steps=100,
-        eval_strategy="steps",
-        eval_steps=1,
-        save_strategy="steps",
-        load_best_model_at_end=True,
+        num_train_epochs=1,
+        load_best_model_at_end=False,
         learning_rate=1e-4,
         weight_decay=0.01,
     )

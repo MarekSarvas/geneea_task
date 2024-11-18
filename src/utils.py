@@ -57,8 +57,7 @@ def join_text_cols(row, text_cols: List[str], to_lower: bool):
 
 
 def get_labels(train_dataset: Dataset) -> List:
-    """_
-
+    """
     Args:
         train_dataset (Dataset): Training split of the dataset.
 
@@ -106,7 +105,7 @@ def prepare_dataset(dataset: DatasetDict, tokenizer, text_cols: List[str], label
 
 
 
-def load_models(model_name: str, tokenizer_name: str, num_labels: int, local_files_only=False) -> Tuple:
+def load_models(model_name: str, tokenizer_name: str, id2label: Optional[Dict] = None, label2id: Optional[Dict] = None, local_files_only=False) -> Tuple:
     """
 
     Args:
@@ -116,12 +115,20 @@ def load_models(model_name: str, tokenizer_name: str, num_labels: int, local_fil
     Returns:
         Tuple[AutoModelForSequenceClassification, AutoTokenizer]: Model and tokenizer.
     """
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
-                model_name,
-                num_labels=num_labels,
-                local_files_only=local_files_only
-            )
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, local_files_only=local_files_only)
+    if id2label is not None:
+        model = AutoModelForSequenceClassification.from_pretrained(
+                    model_name,
+                    num_labels=len(id2label),
+                    id2label=id2label,
+                    label2id=label2id,
+                    local_files_only=local_files_only
+                )
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(
+                    model_name,
+                    local_files_only=local_files_only
+                )
 
     return model, tokenizer
 
