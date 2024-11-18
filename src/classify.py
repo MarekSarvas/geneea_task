@@ -8,15 +8,10 @@ import tqdm
 import numpy as np
 import pandas as pd
 from datasets import load_dataset
-from transformers import (
-        TrainingArguments,
-        Trainer,
-        DataCollatorWithPadding,
-)
+
 from torch.utils.data import DataLoader
 
 from utils import (
-    compute_metrics,
     prepare_dataset,
     prepare_onnx_batch,
     load_onnx_models,

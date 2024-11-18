@@ -13,7 +13,6 @@ from transformers import (
 )
 from transformers.onnx import FeaturesManager
 from datasets import load_dataset, disable_caching
-from optimum.onnxruntime import ORTModelForSequenceClassification
 
 from utils import (
         create_label_mapping,
@@ -109,7 +108,8 @@ def main(args):
             dataset,
             tokenizer=tokenizer,
             text_cols=args.text_cols,
-            label2id=label2id
+            label2id=label2id,
+            to_lower=False,
     )
 
     # TODO: set correct hyperparams
@@ -119,11 +119,12 @@ def main(args):
         per_device_train_batch_size=16,
         gradient_accumulation_steps=4,
         per_device_eval_batch_size=8,
-        num_train_epochs=1,
-        max_steps=5,
+        num_train_epochs=10,
+        max_steps=1600,
         save_strategy="steps",
-        save_steps=5,
-        eval_steps=5,
+        eval_strategy="steps",
+        save_steps=400,
+        eval_steps=200,
         load_best_model_at_end=False,
         learning_rate=1e-4,
         weight_decay=0.01,
