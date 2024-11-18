@@ -1,7 +1,8 @@
 """Implementation of utility methods for data manipulation and metric computation.
 """
-from typing import Dict, Tuple, List
 from pathlib import Path
+import json
+from typing import Dict, Tuple, List
 
 import numpy as np
 from transformers import (
@@ -12,25 +13,24 @@ from datasets import load_dataset, DatasetDict, Dataset, ClassLabel
 import evaluate
 
 
-def load_data(train: Path, val: Path) -> DatasetDict:
-    """
+def create_label_mapping(labels: List[str], out_path: Path) -> Dict:
+    """Save mappings between text labels and corresponding numeric IDs as json.
 
     Args:
-        train (Path): Path to json file with training data.
-        val (Path): Path to json file with validation data.
+        labels (List[str]): List of labels in train split.
+        out_path (Path): Output json path.
 
     Returns:
-        DatasetDict: HuggingFace format dataset.
+        Dict: Label-to-ID mappings
     """
-    data_files = {}
-    for split, path in zip(["train", "val"], [train, val]):
-        if path.exists():
-            data_files[split] = str(path)
-        else:
-            print(f"Skipping {split} split, path {path} does not exists.")
+    labels.sort()
+    label2id = {label: id for id, label in enumerate(labels)}
+    out_path.touch(exist_ok=True)
+    print(f"Saving label2id mapping into {out_path}")
+    with out_path.open(mode='w', encoding='utf-8') as f:
+        json.dump(label2id, f, indent=4)
 
-    dataset = load_dataset("json", data_files=data_files)
-    return dataset
+    return label2id
 
 
 def join_text_cols(row, text_cols: List[str], to_lower: bool):
@@ -65,7 +65,7 @@ def get_labels(train_dataset: Dataset) -> List:
     return labels
 
 
-def prepare_dataset(dataset: DatasetDict, tokenizer, text_cols: List[str], labels: List[str], max_length: int=256, padding: str="longest", to_lower: bool=True) -> DatasetDict:
+def prepare_dataset(dataset: DatasetDict, tokenizer, text_cols: List[str], label2id: Dict, max_length: int=256, padding: str="longest", to_lower: bool=True) -> DatasetDict:
     """Create text column (model input), tokenizes the text and maps
     string labels into numeric values.
 
@@ -95,15 +95,15 @@ def prepare_dataset(dataset: DatasetDict, tokenizer, text_cols: List[str], label
 
     # assign ID to categorical features
     dataset = dataset.rename_column("category", "labels")
-    cat_feats = ClassLabel(num_classes=len(labels), names=labels)
+    cat_feats = ClassLabel(num_classes=len(label2id), names=list(label2id.keys()))
     dataset = dataset.cast_column("labels", cat_feats)
 
     return dataset
 
 
 
-def load_models(model_name: str, num_labels: int) -> Tuple:
-    """_summary_
+def load_models(model_name: str, tokenizer_name: str, num_labels: int, local_files_only=False) -> Tuple:
+    """
 
     Args:
         model_name (str): Name of the pre-trained model.
@@ -112,10 +112,11 @@ def load_models(model_name: str, num_labels: int) -> Tuple:
     Returns:
         Tuple[AutoModelForSequenceClassification, AutoTokenizer]: Model and tokenizer.
     """
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     model = AutoModelForSequenceClassification.from_pretrained(
                 model_name,
                 num_labels=num_labels,
+                local_files_only=local_files_only
             )
 
     return model, tokenizer

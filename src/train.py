@@ -1,6 +1,5 @@
-"""_summary_
-
-
+"""Module for training a transformer encoder model for 
+sequence classification.
 """
 import argparse
 from pathlib import Path
@@ -10,10 +9,10 @@ from transformers import (
         Trainer,
         DataCollatorWithPadding,
 )
-from datasets import disable_caching
+from datasets import load_dataset, disable_caching
 
 from utils import (
-        load_data,
+        create_label_mapping,
         load_models,
         get_labels,
         compute_metrics,
@@ -73,13 +72,26 @@ def parse_args():
 def main(args):
     # for development purpose
     disable_caching()
+
     # 1. Load dataset
     train, val = Path(args.train_data), Path(args.val_data)
-    dataset = load_data(train, val)
+    data_files = {}
+    for split, path in zip(["train", "val"], [train, val]):
+        if path.exists() and path.suffix == ".jsonl":
+            data_files[split] = str(path)
+        else:
+            print(f"Skipping {split} split, path {path} does not exists.")
+
+    dataset = load_dataset("json", data_files=data_files)
+
+    # store label 2 id mappings
     labels = get_labels(dataset["train"])
+    label2id_path = train.parent / "label2id.json"
+    label2id = create_label_mapping(labels, label2id_path)
+
 
     # 2. Load models
-    model, tokenizer = load_models(args.model, len(labels))
+    model, tokenizer = load_models(args.model, args.model, len(label2id))
     collator = DataCollatorWithPadding(tokenizer)
 
     # 3. preprocess and tokenize dataset
@@ -87,7 +99,7 @@ def main(args):
             dataset,
             tokenizer=tokenizer,
             text_cols=args.text_cols,
-            labels=labels
+            label2id=label2id
     )
 
     # 3. Prepare params for training
@@ -116,12 +128,6 @@ def main(args):
     )
     trainer.train()
     trainer.save_model(args.exp_dir)
-
-
-
-
-
-
 
 
 if __name__ == "__main__":
