@@ -13,13 +13,12 @@ from transformers import DataCollatorWithPadding
 from torch.utils.data import DataLoader
 
 from utils import (
-    load_models,
     compute_metrics,
     prepare_dataset,
-    prepare_onnx_batch
+    prepare_onnx_batch,
+    load_onnx_models,
+    load_mappings
 )
-
-import onnxruntime
 
 
 def parse_args():
@@ -62,11 +61,12 @@ def main(args):
         raise FileNotFoundError("Test data file does not exists.")
 
     # 2. Load models
-    model, tokenizer = load_models(str(exp_dir), str(exp_dir), local_files_only=True)
-    collator = DataCollatorWithPadding(tokenizer, padding=True)
+    onnx_model_path = exp_dir/ "model.onnx"
+    onnx_session, tokenizer = load_onnx_models(onnx_model_path, tokenizer_name=exp_dir, local_files_only=True)
 
-    label2id = model.config.label2id
-    id2label= model.config.id2label
+    # load label mappings
+    label2id, id2label = load_mappings(exp_dir/"label2id.json")
+
 
     # 3. preprocess and tokenize dataset
     dataset = prepare_dataset(
@@ -80,15 +80,7 @@ def main(args):
     if not eval_dir.exists():
         eval_dir.mkdir(parents=True, exist_ok=True)
 
-    providers = [
-    ('CUDAExecutionProvider', {
-        'device_id': 0,
-    }),
-    'CPUExecutionProvider',
-    ]
-    onnx_model_path = exp_dir/ "onnx" / "model.onnx"
-    onnx_session = onnxruntime.InferenceSession(onnx_model_path, providers=providers)
-
+    # 4. Run prediction inference
     predictions = []
     train_dataloader = DataLoader(dataset["test"], batch_size=32, collate_fn=tokenizer.pad)
     for batch in tqdm.tqdm(train_dataloader, total=len(train_dataloader)):
@@ -100,7 +92,7 @@ def main(args):
     labels = dataset["test"]["labels"][:32]
     predictions = np.concatenate(predictions, axis=0)
 
-
+    # 5. Evaluate model performance
     metrics = compute_metrics((predictions, labels), args.verbose, id2label=id2label)
 
     predictions = np.argmax(predictions, axis=1)
@@ -110,7 +102,7 @@ def main(args):
 
     cm = confusion_matrix(y_true=labels, y_pred=predictions)
     np.save(eval_dir / "confusion_matrix.npy", cm)
-    
+
     with (eval_dir/"metrics.json").open(mode='w', encoding='utf-8') as f:
         json.dump(metrics, f, indent=4)
 

@@ -15,7 +15,7 @@ from sklearn.metrics import (
         recall_score,
         accuracy_score
 )
-
+import onnxruntime
 
 def create_label_mapping(labels: List[str], out_path: Path) -> Dict:
     """Save mappings between text labels and corresponding numeric IDs as json.
@@ -194,13 +194,20 @@ def prepare_onnx_batch(batch: Dict) -> Dict:
     return onnx_inputs
 
 
-#def onnx_predict(session, dataset, batch_size: int) -> List:
-#    predictions = []
-#    for i in range(0, len(dataset), batch_size):
-#        print(f"BATCH: {i}:{i+batch_size}")
-#        batch = dataset[i:i+batch_size]
-#        breakpoint()
-#        batch_inputs = prepare_onnx_batch(batch)
-#        batch_predictions = session.run("logits", batch_inputs)
-#        predictions.append(batch_predictions[0])
-#    return predictions
+def load_onnx_models(onnx_model_path: Path, tokenizer_name: str, local_files_only=False):
+    providers = [
+        ('CUDAExecutionProvider', {
+            'device_id': 0,
+        }),
+        'CPUExecutionProvider',
+        ]
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, local_files_only=local_files_only)
+    onnx_session = onnxruntime.InferenceSession(onnx_model_path, providers=providers)
+    return onnx_session, tokenizer
+
+
+def load_mappings(label2id_path: Path) -> Tuple[Dict, Dict]:
+    with open(label2id_path, "r", encoding="utf-8") as f:
+        label2id = json.load(f)
+    id2label = {v:k for k,v in label2id.items()}
+    return label2id, id2label

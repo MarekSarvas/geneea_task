@@ -141,14 +141,13 @@ def main(args):
     )
     trainer.train()
     trainer.save_model(exp_dir)
+    tokenizer.save_pretrained(exp_dir)
 
 
 
     # set parameters and paths
     feature = "sequence-classification"
-    onnx_dir = exp_dir / "onnx"
-    onnx_dir.mkdir(parents=True, exist_ok=True)
-    onnx_model_path = onnx_dir / "model.onnx"
+    onnx_model_path =  exp_dir / "model.onnx"
 
     _, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=feature)
     onnx_config = model_onnx_config(model.config)
@@ -161,7 +160,7 @@ def main(args):
             opset=14,
             output=onnx_model_path
     )
-    tokenizer.save_pretrained(onnx_model_path.parent)
+
 
 
 
