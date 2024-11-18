@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+import tqdm
 import numpy as np
 import pandas as pd
 from datasets import load_dataset
@@ -12,13 +13,15 @@ from transformers import (
         Trainer,
         DataCollatorWithPadding,
 )
+from torch.utils.data import DataLoader
 
 from utils import (
-    load_models,
     compute_metrics,
-    prepare_dataset
+    prepare_dataset,
+    prepare_onnx_batch,
+    load_onnx_models,
+    load_mappings
 )
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Parse data and hyper params for training.")
@@ -55,12 +58,12 @@ def main(args):
         raise FileNotFoundError("Test data file does not exists.")
 
     # 2. Load models
-    model, tokenizer = load_models(args.model_dir, args.model_dir, local_files_only=True)
-    collator = DataCollatorWithPadding(tokenizer)
+    model_dir = Path(args.model_dir)
+    onnx_model_path = model_dir/ "model.onnx"
+    onnx_session, tokenizer = load_onnx_models(onnx_model_path, tokenizer_name=model_dir, local_files_only=True)
 
-    label2id = model.config.label2id
-    id2label= model.config.id2label
-
+    # load label mappings
+    label2id, id2label = load_mappings(model_dir/"label2id.json")
     # 3. preprocess and tokenize dataset
     dataset = prepare_dataset(
             dataset,
@@ -69,24 +72,16 @@ def main(args):
             label2id=label2id
     )
 
-    # 3. Prepare params for training
-    training_args = TrainingArguments(
-        output_dir=args.model_dir,
-        per_device_eval_batch_size=8,
-    )
+    # 4. Run prediction inference
+    predictions = []
+    dataloader = DataLoader(dataset["test"], batch_size=8, collate_fn=tokenizer.pad)
+    for batch in tqdm.tqdm(dataloader, total=len(dataloader)):
+        inputs = prepare_onnx_batch(batch)
+        batch_preds = onnx_session.run(["logits"], inputs)
+        predictions.append(batch_preds[0])
 
-    # 4. Train the model
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=None,
-        eval_dataset=None,
-        tokenizer=tokenizer,
-        data_collator=collator,
-        compute_metrics=lambda x: compute_metrics(x, id2label=id2label),
-    )
-
-    predictions, _, _= trainer.predict(dataset["test"])
+    #labels = dataset["test"]["labels"][:32]
+    predictions = np.concatenate(predictions, axis=0)
     predictions = np.argmax(predictions, axis=1)
     predictions = [id2label[x] for x in predictions]
 
@@ -94,6 +89,7 @@ def main(args):
     orig_json = pd.read_json(data_path, lines=True)
     orig_json["category"] = predictions
     orig_json.to_json(new_json, orient='records', lines=True)
+
 
 
 if __name__ == "__main__":

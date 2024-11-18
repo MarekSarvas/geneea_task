@@ -195,6 +195,15 @@ def prepare_onnx_batch(batch: Dict) -> Dict:
 
 
 def load_onnx_models(onnx_model_path: Path, tokenizer_name: str, local_files_only=False):
+    """
+    Args:
+        onnx_model_path (Path):
+        tokenizer_name (str):
+        local_files_only (bool, optional): When loading tokenizer from local data. Defaults to False.
+
+    Returns:
+        _type_: Onnx inference session and tokenizer. 
+    """
     providers = [
         ('CUDAExecutionProvider', {
             'device_id': 0,
@@ -207,6 +216,13 @@ def load_onnx_models(onnx_model_path: Path, tokenizer_name: str, local_files_onl
 
 
 def load_mappings(label2id_path: Path) -> Tuple[Dict, Dict]:
+    """
+    Args:
+        label2id_path (Path): Path to json file where the mappings are saved.
+
+    Returns:
+        Tuple[Dict, Dict]: Mappings in both ways.
+    """
     with open(label2id_path, "r", encoding="utf-8") as f:
         label2id = json.load(f)
     id2label = {v:k for k,v in label2id.items()}

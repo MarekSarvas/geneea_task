@@ -8,8 +8,6 @@ import tqdm
 import numpy as np
 from sklearn.metrics import confusion_matrix
 from datasets import load_dataset
-
-from transformers import DataCollatorWithPadding
 from torch.utils.data import DataLoader
 
 from utils import (
