@@ -3,6 +3,7 @@ import argparse
 
 from pathlib import Path
 import pandas as pd
+from imblearn.over_sampling import RandomOverSampler
 
 def parse_args():
     """Parse datasets paths and training hyper parameters.
@@ -34,6 +35,26 @@ def join_labels(x, cat_dict):
                 return k
     return x
 
+
+def normalize_url(url: str) -> str:
+    new_url = url.split("/")[-1].split(".")[0].rsplit("_")[0]
+    return new_url
+
+
+def resample_data(df: pd.DataFrame) -> pd.DataFrame:
+    features = df.drop(columns=["category"])
+    y = df["category"]  # Labels (category column)
+    # Initialize RandomOverSampler
+    oversampler = RandomOverSampler(sampling_strategy='auto', random_state=42)
+
+    # Apply oversampling
+    features_resampled, y_resampled = oversampler.fit_resample(features, y)
+
+    # Combine the resampled features and labels back into a DataFrame
+    df_resampled = pd.DataFrame(features_resampled, columns=features.columns)
+    df_resampled['category'] = y_resampled
+    return df_resampled
+
 def main(args):
     # 1. process paths
     data_dir = Path(args.data_dir)
@@ -57,7 +78,13 @@ def main(args):
     for split in splits:
         df = pd.read_json(data_dir / f"{split}", lines=True)
         df["category"] = df["category"].map(lambda x: join_labels(x, join_minor_categories))
+        df["link"] = df["link"].map(normalize_url)
+        if "train" in split:
+            df = resample_data(df.copy())
         df.to_json(new_data_dir/split, orient="records", lines=True)
+
+    
+        
 
 if __name__ == "__main__":
     random.seed(42)

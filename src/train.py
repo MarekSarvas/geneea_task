@@ -150,6 +150,7 @@ def main(args):
     feature = "sequence-classification"
     onnx_model_path =  exp_dir / "model.onnx"
 
+    print(f"Exporting the model into onnx to: {onnx_model_path}")
     _, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=feature)
     onnx_config = model_onnx_config(model.config)
     model = model.cpu()
@@ -161,6 +162,7 @@ def main(args):
             opset=14,
             output=onnx_model_path
     )
+    print("TRAINING DONE")
 
 
 
