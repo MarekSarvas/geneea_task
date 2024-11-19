@@ -19,7 +19,6 @@ from datasets import load_dataset, disable_caching
 
 from utils import (
         create_label_mapping,
-        load_models,
         get_labels,
         compute_metrics,
         prepare_dataset,
