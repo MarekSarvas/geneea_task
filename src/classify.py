@@ -1,7 +1,6 @@
-"""
+"""This model adds news categories into an input jsonfile as "category" key.
 """
 import argparse
-import json
 from pathlib import Path
 
 import tqdm
