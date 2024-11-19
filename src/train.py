@@ -4,12 +4,15 @@ sequence classification.
 import argparse
 from pathlib import Path
 import random
+from typing import Dict
 
 from transformers import (
         TrainingArguments,
         Trainer,
         DataCollatorWithPadding,
-        onnx
+        onnx,
+        AutoModelForSequenceClassification,
+        AutoTokenizer,
 )
 from transformers.onnx import FeaturesManager
 from datasets import load_dataset, disable_caching
@@ -72,7 +75,7 @@ def parse_args():
     parser.add_argument(
         "--lr",
         type=float,
-        default=1e-3,
+        default=1e-4,
         help="Learning rate for the training."
     )
     parser.add_argument(
@@ -84,11 +87,28 @@ def parse_args():
     parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
-        default=4,
+        default=2,
         help=""
     )
     return parser.parse_args()
 
+
+def optuna_hp_space(trial):
+    return {
+        "learning_rate": trial.suggest_float("learning_rate", 6e-5, 1e-4, log=True),
+        "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [8, 16]),
+        "num_train_epochs": trial.suggest_int("num_train_epochs", 3, 7, log=True),
+        "gradient_accumulation_steps": trial.suggest_int("gradient_accumulation_steps", 1, 4, log=True),
+    }
+
+
+def model_init(trial, model_name_or_path: str, id2label: Dict, label2id: Dict):
+    return AutoModelForSequenceClassification.from_pretrained(
+        model_name_or_path,
+        num_labels=len(id2label),
+        id2label=id2label,
+        label2id=label2id,
+    )
 
 def main(args):
     # for development purpose
@@ -118,7 +138,7 @@ def main(args):
 
 
     # 2. Load models
-    model, tokenizer = load_models(args.model, args.model, label2id=label2id, id2label=id2label)
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
     collator = DataCollatorWithPadding(tokenizer)
 
     # 3. preprocess and tokenize dataset
@@ -130,42 +150,59 @@ def main(args):
             to_lower=args.lowercase,
     )
 
-    # 3. Prepare params for training
+    # 4.Initialize training arguments and trainer 
     training_args = TrainingArguments(
         output_dir=exp_dir,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         per_device_eval_batch_size=args.batch_size,
-        num_train_epochs=10,
-        max_steps=10000,
-        save_strategy="steps",
-        eval_strategy="steps",
-        save_steps=1000,
-        eval_steps=500,
+        num_train_epochs=2,
+        save_strategy="epoch",
+        eval_strategy="epoch",
         logging_steps=100,
         save_total_limit=5,
         load_best_model_at_end=True,
         learning_rate=args.lr,
         weight_decay=0.01,
     )
-
-    # 4. Train the model
     trainer = Trainer(
-        model=model,
+        model=None,
         args=training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["val"],
         tokenizer=tokenizer,
         data_collator=collator,
+        model_init=lambda trial: model_init(trial, args.model, label2id=label2id, id2label=id2label),
         compute_metrics=lambda x: compute_metrics(x, verbose=False, id2label=id2label),
     )
+
+    # 5. Perform hyperparam search
+    best_run = trainer.hyperparameter_search(
+        direction="maximize",
+        hp_space=optuna_hp_space,
+        backend="optuna",
+        n_trials=10
+    )
+
+    for n, v in best_run.hyperparameters.items():
+        setattr(training_args, n, v)
+
+    # 6. Retrain the model
+    model = model_init(None, args.model, label2id=label2id, id2label=id2label)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=dataset['train'],
+        eval_dataset=dataset['val'],
+        tokenizer=tokenizer,
+        compute_metrics=lambda x: compute_metrics(x, verbose=False, id2label=id2label),
+    )
+
     trainer.train()
     trainer.save_model(exp_dir)
     tokenizer.save_pretrained(exp_dir)
 
-
-
-    # set parameters and paths
+    # 7. Export to onnx format
     feature = "sequence-classification"
     onnx_model_path =  exp_dir / "model.onnx"
 
@@ -173,7 +210,6 @@ def main(args):
     _, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=feature)
     onnx_config = model_onnx_config(model.config)
     model = model.cpu()
-    # export
     _, _ = onnx.export(
             preprocessor=tokenizer,
             model=model,

@@ -105,35 +105,6 @@ def prepare_dataset(dataset: DatasetDict, tokenizer, text_cols: List[str], label
 
 
 
-def load_models(model_name: str, tokenizer_name: str, id2label: Optional[Dict] = None, label2id: Optional[Dict] = None, local_files_only=False) -> Tuple:
-    """
-
-    Args:
-        model_name (str): Name of the pre-trained model.
-        num_labels (int): Number of classes.
-
-    Returns:
-        Tuple[AutoModelForSequenceClassification, AutoTokenizer]: Model and tokenizer.
-    """
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, local_files_only=local_files_only)
-    tokenizer.model_input_names = ['input_ids', 'attention_mask']
-    if id2label is not None:
-        model = AutoModelForSequenceClassification.from_pretrained(
-                    model_name,
-                    num_labels=len(id2label),
-                    id2label=id2label,
-                    label2id=label2id,
-                    local_files_only=local_files_only
-                )
-    else:
-        model = AutoModelForSequenceClassification.from_pretrained(
-                    model_name,
-                    local_files_only=local_files_only
-                )
-
-    return model, tokenizer
-
-
 def prettyfy_metric(category_scores: np.ndarray, id2label: Optional[Dict] = None) -> Dict:
     """Store computed precision or recall as dictionary for each label.
 
