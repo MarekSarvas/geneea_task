@@ -89,6 +89,12 @@ def parse_args():
         default=2,
         help=""
     )
+    parser.add_argument(
+        "--n_trials",
+        type=int,
+        default=1,
+        help="Number of trials for hyper param search."
+    )
     return parser.parse_args()
 
 
@@ -180,7 +186,7 @@ def main(args):
         direction="maximize",
         hp_space=optuna_hp_space,
         backend="optuna",
-        n_trials=10
+        n_trials=args.n_trials
     )
 
     for n, v in best_run.hyperparameters.items():
