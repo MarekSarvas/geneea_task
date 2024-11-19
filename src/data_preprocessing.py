@@ -65,8 +65,9 @@ def normalize_url(url: str) -> str:
     Returns:
         str: Text information.
     """
-    new_url = url.split("/")[-1].split(".")[0].rsplit("_")[0]
-    url_text = new_url.replace("-", " ").replace("_", " ")
+    new_url = url.split("/")[-1].split(".")[0].rsplit("_", 1)[0]
+    url_text = new_url.replace("-", " ").replace("_", " ").strip()
+    url_text = " ".join(list(url_text.split()))
     return url_text
 
 

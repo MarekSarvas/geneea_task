@@ -5,10 +5,7 @@ import json
 from typing import Dict, Tuple, List, Optional
 
 import numpy as np
-from transformers import (
-        AutoModelForSequenceClassification,
-        AutoTokenizer
-)
+from transformers import AutoTokenizer
 from datasets import DatasetDict, Dataset, ClassLabel
 from sklearn.metrics import (
         precision_score,
